@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Proyektor — Slideshow Otomatis</title>
+<style>
+  :root{
+    --bg: #0b0b0d;
+    --bg-raised: #141417;
+    --curtain: #6e1f2b;
+    --curtain-dim: #4a151d;
+    --amber: #f2a640;
+    --amber-dim: #a8732c;
+    --paper: #ece7dd;
+    --paper-dim: #918c82;
+    --line: #232227;
+    --font-display: 'Bebas Neue', 'Oswald', 'Arial Narrow', sans-serif;
+    --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+  }
+  @font-face{
+    font-family:'Bebas Neue';
+    src: local('Bebas Neue');
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{
+    height:100%; margin:0; background:var(--bg); color:var(--paper);
+    font-family:var(--font-body);
+    overflow:hidden;
+  }
+  #app{
+    height:100vh; height:100dvh; width:100vw;
+    display:flex; flex-direction:column;
+    position:relative;
+  }
+
+  /* ---------- Marquee header ---------- */
+  header{
+    display:flex; align-items:center; gap:14px;
+    padding:10px 18px;
+    background:linear-gradient(180deg, var(--bg-raised), var(--bg));
+    border-bottom:1px solid var(--line);
+    z-index:20;
+    flex-shrink:0;
+  }
+  .logo{
+    font-family:var(--font-display);
+    font-size:26px;
+    letter-spacing:2px;
+    color:var(--amber);
+    display:flex; align-items:center; gap:8px;
+    white-space:nowrap;
+  }
+  .logo .dot{width:8px;height:8px;border-radius:50%;background:var(--curtain);box-shadow:0 0 8px 2px var(--curtain);}
+  .logo .dot.live{background:var(--amber); box-shadow:0 0 10px 3px rgba(242,166,64,.7); animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .status-text{
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.08em;
+    color:var(--paper-dim); text-transform:uppercase;
+  }
+  .head-spacer{flex:1;}
+  .icon-btn{
+    background:transparent; border:1px solid var(--line); color:var(--paper);
+    width:36px; height:36px; border-radius:6px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition: all .15s ease;
+  }
+  .icon-btn:hover{border-color:var(--amber-dim); color:var(--amber); background:rgba(242,166,64,.06);}
+  .icon-btn.active{background:var(--amber); border-color:var(--amber); color:#1a1200;}
+  .icon-btn svg{width:17px;height:17px;}
+
+  /* ---------- Panel: add links ---------- */
+  #panel{
+    position:absolute; top:56px; left:0; right:0;
+    background:var(--bg-raised);
+    border-bottom:1px solid var(--line);
+    z-index:19;
+    max-height:0; overflow:hidden;
+    transition: max-height .28s ease;
+  }
+  #panel.open{max-height:70vh; overflow-y:auto;}
+  .panel-inner{padding:18px 22px 22px;}
+  .panel-row{display:flex; gap:10px; margin-bottom:12px;}
+  textarea#urls{
+    flex:1; min-height:90px; resize:vertical;
+    background:var(--bg); border:1px solid var(--line); border-radius:8px;
+    color:var(--paper); padding:12px 14px; font-family:var(--font-mono); font-size:12.5px;
+    line-height:1.6;
+  }
+  textarea#urls:focus{outline:none; border-color:var(--amber-dim);}
+  .btn{
+    font-family:var(--font-body); font-weight:600; font-size:13px;
+    border:none; border-radius:7px; padding:10px 18px; cursor:pointer;
+    transition: transform .12s ease, background .15s ease;
+  }
+  .btn:active{transform:scale(0.96);}
+  .btn-primary{background:var(--amber); color:#1a1200;}
+  .btn-primary:hover{background:#ffb757;}
+  .btn-ghost{background:transparent; color:var(--paper-dim); border:1px solid var(--line);}
+  .btn-ghost:hover{color:var(--paper); border-color:var(--paper-dim);}
+  .panel-hint{font-size:11.5px; color:var(--paper-dim); margin-bottom:10px; line-height:1.6;}
+  .panel-hint b{color:var(--paper);}
+
+  .settings-grid{
+    display:flex; flex-wrap:wrap; gap:22px; align-items:center;
+    padding-top:12px; border-top:1px solid var(--line);
+  }
+  .setting{display:flex; flex-direction:column; gap:6px;}
+  .setting label{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--paper-dim);}
+  .setting input[type=number]{
+    width:70px; background:var(--bg); border:1px solid var(--line); border-radius:6px;
+    color:var(--paper); padding:6px 8px; font-family:var(--font-mono);
+  }
+  .toggle-row{display:flex; align-items:center; gap:8px;}
+  .switch{
+    width:38px; height:22px; border-radius:20px; background:var(--line);
+    position:relative; cursor:pointer; transition: background .2s;
+    border:none; flex-shrink:0;
+  }
+  .switch.on{background:var(--amber-dim);}
+  .switch::after{
+    content:''; position:absolute; width:16px; height:16px; border-radius:50%;
+    background:var(--paper); top:3px; left:3px; transition: left .2s;
+  }
+  .switch.on::after{left:19px; background:#1a1200;}
+
+  /* ---------- Stage ---------- */
+  #stage{
+    flex:1; position:relative; overflow:hidden;
+    background:#000;
+    display:flex; align-items:center; justify-content:center;
+    min-height:0;
+  }
+  .slide{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; transition: opacity .55s ease;
+    pointer-events:none;
+  }
+  .slide.active{opacity:1; pointer-events:auto;}
+  .slide img, .slide video{
+    max-width:100%; max-height:100%; object-fit:contain;
+    box-shadow: 0 0 90px rgba(0,0,0,.6);
+  }
+  .slide .err{
+    color:var(--paper-dim); font-family:var(--font-mono); font-size:13px;
+    text-align:center; padding:20px; max-width:420px;
+  }
+  .slide .err .code{color:var(--curtain); font-family:var(--font-display); font-size:44px; letter-spacing:3px; display:block; margin-bottom:8px;}
+  .ig-wrap{
+    width:100%; max-width:540px; height:100%; max-height:100%;
+    display:flex; align-items:center; justify-content:center; overflow:auto;
+  }
+  .ig-wrap iframe{margin:0 auto !important;}
+  .ig-loading{
+    color:var(--paper-dim); font-family:var(--font-mono); font-size:12px; text-align:center;
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+  }
+  .ig-loading .spin{
+    width:26px; height:26px; border-radius:50%; border:2px solid var(--line); border-top-color:var(--amber);
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .thumb.ig{
+    background: linear-gradient(135deg, #405de6, #5851db, #833ab4, #c13584, #e1306c, #fd1d1d, #f56040, #f77737, #fcaf45, #ffdc80);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .thumb.ig .ig-icon{color:#fff; font-size:20px;}
+
+  /* film grain vignette */
+  #stage::before{
+    content:''; position:absolute; inset:0; pointer-events:none; z-index:5;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%);
+  }
+
+  #empty-state{
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    color:var(--paper-dim); text-align:center; padding:30px;
+  }
+  #empty-state .reel{
+    width:64px; height:64px; border-radius:50%; border:4px solid var(--line);
+    display:flex; align-items:center; justify-content:center; position:relative;
+  }
+  #empty-state .reel::before, #empty-state .reel::after{
+    content:''; position:absolute; width:14px; height:14px; border-radius:50%; background:var(--line);
+  }
+  #empty-state .reel::before{top:8px; left:14px;}
+  #empty-state .reel::after{bottom:8px; right:14px;}
+  #empty-state h2{font-family:var(--font-display); letter-spacing:2px; color:var(--paper); font-size:22px; margin:0;}
+  #empty-state p{margin:0; font-size:13px; max-width:280px;}
+
+  /* ---------- Progress bar (top of stage) ---------- */
+  #progress-track{
+    position:absolute; top:0; left:0; right:0; height:3px; background:rgba(255,255,255,.08); z-index:15;
+  }
+  #progress-fill{
+    height:100%; width:0%; background:var(--amber); transition: width linear;
+  }
+
+  /* ---------- Slide counter ---------- */
+  #counter{
+    position:absolute; top:14px; right:18px; z-index:15;
+    font-family:var(--font-mono); font-size:12px; color:var(--paper);
+    background:rgba(0,0,0,.45); padding:5px 11px; border-radius:20px;
+    letter-spacing:.05em; backdrop-filter: blur(4px);
+  }
+
+  /* click zones for prev/next */
+  .clickzone{position:absolute; top:0; bottom:0; width:18%; z-index:14; cursor:pointer;}
+  .clickzone.left{left:0;}
+  .clickzone.right{right:0;}
+  .clickzone .arrow{
+    position:absolute; top:50%; transform:translateY(-50%);
+    opacity:0; transition:opacity .2s; color:#fff; font-size:28px;
+    background:rgba(0,0,0,.35); width:42px; height:42px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .clickzone.left .arrow{left:10px;}
+  .clickzone.right .arrow{right:10px;}
+  .clickzone:hover .arrow{opacity:1;}
+
+  /* ---------- Filmstrip ---------- */
+  #filmstrip-wrap{
+    flex-shrink:0; background:var(--bg-raised); border-top:1px solid var(--line);
+    padding:10px 14px; z-index:20;
+  }
+  #filmstrip{
+    display:flex; gap:8px; overflow-x:auto; scroll-behavior:smooth;
+    padding-bottom:4px;
+  }
+  #filmstrip::-webkit-scrollbar{height:5px;}
+  #filmstrip::-webkit-scrollbar-thumb{background:var(--line); border-radius:3px;}
+  .thumb{
+    flex-shrink:0; width:72px; height:48px; border-radius:5px; overflow:hidden;
+    border:2px solid transparent; cursor:pointer; position:relative;
+    background:var(--bg); display:flex; align-items:center; justify-content:center;
+    transition: border-color .15s ease;
+  }
+  .thumb.current{border-color:var(--amber);}
+  .thumb img, .thumb video{width:100%; height:100%; object-fit:cover;}
+  .thumb .badge{
+    position:absolute; bottom:2px; right:3px; font-size:9px; color:#fff;
+    background:rgba(0,0,0,.6); padding:1px 4px; border-radius:3px; font-family:var(--font-mono);
+  }
+  .thumb .rm{
+    position:absolute; top:2px; right:2px; width:16px; height:16px; border-radius:50%;
+    background:rgba(0,0,0,.65); color:#fff; font-size:11px; display:flex; align-items:center; justify-content:center;
+    opacity:0; transition:opacity .15s;
+  }
+  .thumb:hover .rm{opacity:1;}
+  .thumb.placeholder{color:var(--paper-dim); font-size:10px;}
+
+  /* ---------- Bottom control bar ---------- */
+  #controls{
+    flex-shrink:0; display:flex; align-items:center; gap:10px;
+    padding:10px 18px; background:var(--bg);
+    border-top:1px solid var(--line);
+  }
+  #controls .spacer{flex:1;}
+  .ctrl-btn{
+    background:var(--bg-raised); border:1px solid var(--line); color:var(--paper);
+    width:40px; height:40px; border-radius:50%; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition: all .15s ease;
+  }
+  .ctrl-btn:hover{border-color:var(--amber-dim);}
+  .ctrl-btn.play{background:var(--amber); color:#1a1200; border-color:var(--amber); width:46px; height:46px;}
+  .ctrl-btn.play:hover{background:#ffb757;}
+  .ctrl-btn svg{width:16px; height:16px;}
+  .dur-display{
+    font-family:var(--font-mono); font-size:11px; color:var(--paper-dim); min-width:34px; text-align:center;
+  }
+  input[type=range]{
+    -webkit-appearance:none; width:110px; height:3px; background:var(--line); border-radius:2px; outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:13px; height:13px; border-radius:50%; background:var(--amber); cursor:pointer;
+  }
+
+  @media (max-width: 640px){
+    .logo{font-size:20px;}
+    .status-text{display:none;}
+    .thumb{width:56px; height:38px;}
+    input[type=range]{width:70px;}
+    #controls{gap:6px; padding:8px 10px;}
+    .clickzone{width:22%;}
+  }
+
+  #app.fullscreen header, #app.fullscreen #filmstrip-wrap, #app.fullscreen #controls{
+    opacity:0; pointer-events:none; transition:opacity .3s;
+  }
+  #app.fullscreen:hover header, #app.fullscreen:hover #filmstrip-wrap, #app.fullscreen:hover #controls{
+    opacity:1; pointer-events:auto;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="logo"><span class="dot" id="liveDot"></span>PROYEKTOR</div>
+    <span class="status-text" id="statusText">0 media dimuat</span>
+    <div class="head-spacer"></div>
+    <button class="icon-btn" id="btnPanel" title="Kelola link media">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <button class="icon-btn" id="btnFullscreen" title="Layar penuh">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+    </button>
+  </header>
+
+  <div id="panel">
+    <div class="panel-inner">
+      <div class="panel-hint">Tempel satu link per baris. Format didukung otomatis: <b>jpg, png, gif, webp</b> untuk gambar, <b>mp4, webm, ogg</b> untuk video, dan link <b>instagram.com/reel</b> atau <b>instagram.com/p</b> akan ditampilkan sebagai postingan Instagram tertanam (embed resmi).</div>
+      <div class="panel-row">
+        <textarea id="urls" placeholder="https://contoh.com/foto1.jpg
+https://contoh.com/video1.mp4
+https://contoh.com/foto2.png"></textarea>
+      </div>
+      <div class="panel-row">
+        <button class="btn btn-primary" id="btnAdd">Tambahkan ke antrian</button>
+        <button class="btn btn-ghost" id="btnClear">Kosongkan semua</button>
+      </div>
+      <div class="settings-grid">
+        <div class="setting">
+          <label>Durasi gambar (detik)</label>
+          <input type="number" id="imgDuration" min="1" max="120" value="5">
+        </div>
+        <div class="setting toggle-row">
+          <label style="margin:0;">Acak urutan</label>
+          <button class="switch" id="toggleShuffle"></button>
+        </div>
+        <div class="setting toggle-row">
+          <label style="margin:0;">Ulangi (loop)</label>
+          <button class="switch on" id="toggleLoop"></button>
+        </div>
+        <div class="setting toggle-row">
+          <label style="margin:0;">Suara video</label>
+          <button class="switch" id="toggleSound"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="stage">
+    <div id="progress-track"><div id="progress-fill"></div></div>
+    <div id="counter" style="display:none;"></div>
+    <div class="clickzone left" id="zoneLeft"><span class="arrow">‹</span></div>
+    <div class="clickzone right" id="zoneRight"><span class="arrow">›</span></div>
+    <div id="empty-state">
+      <div class="reel"></div>
+      <h2>ANTRIAN KOSONG</h2>
+      <p>Klik tombol + di kanan atas untuk menempelkan link gambar atau video, lalu slideshow akan berjalan otomatis.</p>
+    </div>
+  </div>
+
+  <div id="filmstrip-wrap" style="display:none;">
+    <div id="filmstrip"></div>
+  </div>
+
+  <div id="controls" style="display:none;">
+    <button class="ctrl-btn" id="btnPrev" title="Sebelumnya">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+    </button>
+    <button class="ctrl-btn play" id="btnPlay" title="Putar/Jeda">
+      <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    </button>
+    <button class="ctrl-btn" id="btnNext" title="Berikutnya">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 6v12l8.5-6z"/></svg>
+    </button>
+    <div class="spacer"></div>
+    <span class="dur-display">Durasi</span>
+    <input type="range" id="rangeDuration" min="1" max="30" value="5">
+    <span class="dur-display" id="durVal">5s</span>
+    <div class="spacer"></div>
+    <button class="ctrl-btn" id="btnShuffleQuick" title="Acak">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+    </button>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  const IMG_EXT = ['jpg','jpeg','png','gif','webp','avif','svg','bmp'];
+  const VID_EXT = ['mp4','webm','ogg','ogv','mov','m4v'];
+
+  let items = [];        // {id, url, type: 'image'|'video'|'unknown', order}
+  let playOrder = [];    // array of indices into items, defines play sequence
+  let current = 0;       // position within playOrder
+  let playing = false;
+  let loop = true;
+  let shuffle = false;
+  let soundOn = false;
+  let imgDuration = 5;   // seconds
+  let timerRAF = null;
+  let slideStart = 0;
+  let slideDurationMs = 5000;
+  let uid = 1;
+  let isFullscreen = false;
+
+  const stage = document.getElementById('stage');
+  const emptyState = document.getElementById('empty-state');
+  const progressFill = document.getElementById('progress-fill');
+  const counterEl = document.getElementById('counter');
+  const filmstripWrap = document.getElementById('filmstrip-wrap');
+  const filmstrip = document.getElementById('filmstrip');
+  const controls = document.getElementById('controls');
+  const statusText = document.getElementById('statusText');
+  const liveDot = document.getElementById('liveDot');
+
+  function guessType(url){
+    if(/instagram\.com\/(reel|p|tv)\//i.test(url)) return 'instagram';
+    const clean = url.split('?')[0].split('#')[0];
+    const ext = clean.split('.').pop().toLowerCase();
+    if(IMG_EXT.includes(ext)) return 'image';
+    if(VID_EXT.includes(ext)) return 'video';
+    return 'unknown';
+  }
+
+  // ---------- Instagram embed loader ----------
+  let igScriptLoading = false;
+  function loadInstagramEmbed(){
+    if(window.instgrm){ window.instgrm.Embeds.process(); return; }
+    if(igScriptLoading) return;
+    igScriptLoading = true;
+    const s = document.createElement('script');
+    s.src = 'https://www.instagram.com/embed.js';
+    s.async = true;
+    s.onload = ()=>{ igScriptLoading = false; if(window.instgrm) window.instgrm.Embeds.process(); };
+    s.onerror = ()=>{ igScriptLoading = false; };
+    document.body.appendChild(s);
+  }
+
+  function parseUrls(text){
+    return text.split('\n').map(s=>s.trim()).filter(s=>s.length>0 && !s.startsWith('#'));
+  }
+
+  // ---------- Panel toggling ----------
+  const panel = document.getElementById('panel');
+  document.getElementById('btnPanel').addEventListener('click', ()=>{
+    panel.classList.toggle('open');
+  });
+
+  document.getElementById('btnAdd').addEventListener('click', ()=>{
+    const ta = document.getElementById('urls');
+    const urls = parseUrls(ta.value);
+    if(urls.length === 0) return;
+    urls.forEach(u=>{
+      items.push({id: uid++, url: u, type: guessType(u)});
+    });
+    ta.value = '';
+    rebuildOrder(true);
+    renderFilmstrip();
+    updateStatus();
+    if(!playing && items.length === urls.length){
+      // first batch — auto start
+      renderStage();
+      play();
+    }
+  });
+
+  document.getElementById('btnClear').addEventListener('click', ()=>{
+    items = [];
+    playOrder = [];
+    current = 0;
+    pause();
+    renderStage();
+    renderFilmstrip();
+    updateStatus();
+  });
+
+  // ---------- Settings ----------
+  const imgDurationInput = document.getElementById('imgDuration');
+  const rangeDuration = document.getElementById('rangeDuration');
+  const durVal = document.getElementById('durVal');
+
+  function setDuration(v){
+    imgDuration = Math.max(1, Math.min(120, v));
+    imgDurationInput.value = imgDuration;
+    rangeDuration.value = Math.min(30, imgDuration);
+    durVal.textContent = imgDuration + 's';
+  }
+  imgDurationInput.addEventListener('input', e=> setDuration(parseInt(e.target.value)||5));
+  rangeDuration.addEventListener('input', e=> setDuration(parseInt(e.target.value)||5));
+  setDuration(5);
+
+  function toggleSwitch(el, current){
+    el.classList.toggle('on');
+    return el.classList.contains('on');
+  }
+  document.getElementById('toggleLoop').addEventListener('click', function(){ loop = toggleSwitch(this); });
+  document.getElementById('toggleShuffle').addEventListener('click', function(){
+    shuffle = toggleSwitch(this);
+    rebuildOrder(false);
+  });
+  document.getElementById('toggleSound').addEventListener('click', function(){
+    soundOn = toggleSwitch(this);
+    const v = stage.querySelector('.slide.active video');
+    if(v) v.muted = !soundOn;
+  });
+  document.getElementById('btnShuffleQuick').addEventListener('click', ()=>{
+    const sw = document.getElementById('toggleShuffle');
+    sw.classList.add('on'); shuffle = true;
+    rebuildOrder(true);
+    renderStage();
+  });
+
+  function rebuildOrder(resetToStart){
+    const currentItemId = playOrder.length ? items[playOrder[current]] && items[playOrder[current]].id : null;
+    playOrder = items.map((_,i)=>i);
+    if(shuffle){
+      for(let i=playOrder.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [playOrder[i],playOrder[j]] = [playOrder[j],playOrder[i]];
+      }
+    }
+    if(resetToStart || playOrder.length===0){
+      current = 0;
+    } else if(currentItemId != null){
+      const idx = playOrder.findIndex(i => items[i] && items[i].id === currentItemId);
+      current = idx >= 0 ? idx : 0;
+    }
+  }
+
+  function updateStatus(){
+    statusText.textContent = items.length + (items.length===1 ? ' media dimuat' : ' media dimuat');
+    const has = items.length > 0;
+    filmstripWrap.style.display = has ? '' : 'none';
+    controls.style.display = has ? 'flex' : 'none';
+    emptyState.style.display = has ? 'none' : 'flex';
+    counterEl.style.display = has ? '' : 'none';
+  }
+
+  // ---------- Stage rendering ----------
+  function renderStage(){
+    stage.querySelectorAll('.slide').forEach(s=>s.remove());
+    if(playOrder.length === 0){ progressFill.style.width='0%'; return; }
+    const idx = playOrder[current];
+    const item = items[idx];
+    if(!item) return;
+
+    const slide = document.createElement('div');
+    slide.className = 'slide active';
+
+    function showError(){
+      slide.innerHTML = '<div class="err"><span class="code">✕</span>Gagal memuat media<br>' + escapeHtml(item.url) + '</div>';
+    }
+
+    function mountAsImage(){
+      const img = document.createElement('img');
+      img.src = item.url;
+      img.onerror = ()=>{
+        if(item.type === 'unknown' && !item._triedVideo){ item._triedVideo = true; mountAsVideo(); }
+        else showError();
+      };
+      slide.appendChild(img);
+    }
+    function mountAsVideo(){
+      slide.innerHTML = '';
+      const vid = document.createElement('video');
+      vid.src = item.url;
+      vid.autoplay = true;
+      vid.muted = !soundOn;
+      vid.playsInline = true;
+      vid.controls = false;
+      vid.onerror = ()=>{
+        if(item.type === 'unknown' && !item._triedImage){ item._triedImage = true; mountAsImage(); }
+        else showError();
+      };
+      vid.onloadedmetadata = ()=>{
+        if(playing){
+          slideDurationMs = (vid.duration && isFinite(vid.duration) && vid.duration > 0) ? vid.duration*1000 : imgDuration*1000;
+          slideStart = performance.now();
+        }
+      };
+      vid.onended = ()=>{ if(playing) advance(1); };
+      vid.play().catch(()=>{});
+      slide.appendChild(vid);
+    }
+
+    function mountAsInstagram(){
+      const wrap = document.createElement('div');
+      wrap.className = 'ig-wrap';
+      wrap.innerHTML = '<div class="ig-loading"><div class="spin"></div>Memuat postingan Instagram…</div>';
+      slide.appendChild(wrap);
+      requestAnimationFrame(()=>{
+        wrap.innerHTML = '';
+        const bq = document.createElement('blockquote');
+        bq.className = 'instagram-media';
+        bq.setAttribute('data-instgrm-permalink', item.url);
+        bq.setAttribute('data-instgrm-version', '14');
+        bq.style.margin = '0 auto';
+        wrap.appendChild(bq);
+        loadInstagramEmbed();
+      });
+    }
+
+    if(item.type === 'video') mountAsVideo();
+    else if(item.type === 'image') mountAsImage();
+    else if(item.type === 'instagram') mountAsInstagram();
+    else { item._triedVideo=false; item._triedImage=false; mountAsImage(); }
+
+    stage.insertBefore(slide, document.getElementById('progress-track'));
+
+    counterEl.textContent = (current+1) + ' / ' + playOrder.length;
+    slideDurationMs = imgDuration*1000;
+    slideStart = performance.now();
+    highlightThumb(idx);
+  }
+
+  function escapeHtml(s){
+    const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+  }
+
+  // ---------- Filmstrip ----------
+  function renderFilmstrip(){
+    filmstrip.innerHTML = '';
+    items.forEach((item, idx)=>{
+      const t = document.createElement('div');
+      t.className = 'thumb';
+      t.dataset.idx = idx;
+      if(item.type === 'instagram'){
+        t.classList.add('ig');
+        t.innerHTML = '<span class="ig-icon">◎</span>';
+        const b = document.createElement('span'); b.className='badge'; b.textContent='IG'; t.appendChild(b);
+      } else if(item.type === 'video'){
+        const v = document.createElement('video');
+        v.src = item.url; v.muted = true; v.preload='metadata';
+        t.appendChild(v);
+        const b = document.createElement('span'); b.className='badge'; b.textContent='▶'; t.appendChild(b);
+      } else {
+        const img = document.createElement('img');
+        img.src = item.url;
+        img.onerror = ()=>{ t.classList.add('placeholder'); t.textContent = 'media'; };
+        t.appendChild(img);
+      }
+      const rm = document.createElement('div');
+      rm.className = 'rm'; rm.textContent = '✕';
+      rm.addEventListener('click', (e)=>{ e.stopPropagation(); removeItem(idx); });
+      t.appendChild(rm);
+      t.addEventListener('click', ()=> jumpToItem(idx));
+      filmstrip.appendChild(t);
+    });
+  }
+
+  function highlightThumb(idx){
+    filmstrip.querySelectorAll('.thumb').forEach(t=>{
+      t.classList.toggle('current', parseInt(t.dataset.idx) === idx);
+    });
+    const cur = filmstrip.querySelector('.thumb.current');
+    if(cur) cur.scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
+  }
+
+  function removeItem(idx){
+    const removedId = items[idx].id;
+    items.splice(idx,1);
+    items.forEach((it)=>{}); // ids stay stable
+    rebuildOrder(false);
+    renderFilmstrip();
+    updateStatus();
+    if(items.length === 0){ pause(); renderStage(); return; }
+    if(current >= playOrder.length) current = 0;
+    renderStage();
+  }
+
+  function jumpToItem(idx){
+    const pos = playOrder.indexOf(idx);
+    current = pos >= 0 ? pos : 0;
+    renderStage();
+    if(!playing) play();
+  }
+
+  // ---------- Playback control ----------
+  const playIcon = document.getElementById('playIcon');
+  function play(){
+    if(playOrder.length === 0) return;
+    playing = true;
+    liveDot.classList.add('live');
+    playIcon.innerHTML = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
+    const v = stage.querySelector('.slide.active video');
+    if(v){ v.play().catch(()=>{}); slideStart = performance.now(); }
+    else { slideStart = performance.now(); slideDurationMs = imgDuration*1000; }
+    tick();
+  }
+  function pause(){
+    playing = false;
+    liveDot.classList.remove('live');
+    playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+    const v = stage.querySelector('.slide.active video');
+    if(v) v.pause();
+    if(timerRAF) cancelAnimationFrame(timerRAF);
+  }
+  function togglePlay(){ playing ? pause() : play(); }
+
+  function tick(){
+    if(!playing) return;
+    const elapsed = performance.now() - slideStart;
+    const pct = Math.min(100, (elapsed / slideDurationMs) * 100);
+    progressFill.style.width = pct + '%';
+    progressFill.style.transitionDuration = '0ms';
+    const activeVid = stage.querySelector('.slide.active video');
+    if(!activeVid && elapsed >= slideDurationMs){
+      advance(1);
+      return;
+    }
+    timerRAF = requestAnimationFrame(tick);
+  }
+
+  function advance(dir){
+    if(playOrder.length === 0) return;
+    let next = current + dir;
+    if(next >= playOrder.length){
+      if(!loop){ pause(); return; }
+      next = 0;
+    }
+    if(next < 0) next = playOrder.length - 1;
+    current = next;
+    renderStage();
+    if(playing){
+      const v = stage.querySelector('.slide.active video');
+      if(v){ v.play().catch(()=>{}); }
+      slideStart = performance.now();
+      if(!v) slideDurationMs = imgDuration*1000;
+      if(!timerRAF) tick();
+    }
+  }
+
+  document.getElementById('btnPlay').addEventListener('click', togglePlay);
+  document.getElementById('btnNext').addEventListener('click', ()=> advance(1));
+  document.getElementById('btnPrev').addEventListener('click', ()=> advance(-1));
+  document.getElementById('zoneLeft').addEventListener('click', ()=> advance(-1));
+  document.getElementById('zoneRight').addEventListener('click', ()=> advance(1));
+
+  document.addEventListener('keydown', (e)=>{
+    if(e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+    if(e.code === 'Space'){ e.preventDefault(); togglePlay(); }
+    if(e.code === 'ArrowRight'){ advance(1); }
+    if(e.code === 'ArrowLeft'){ advance(-1); }
+    if(e.code === 'KeyF'){ toggleFullscreen(); }
+  });
+
+  // ---------- Fullscreen ----------
+  const appEl = document.getElementById('app');
+  function toggleFullscreen(){
+    if(!document.fullscreenElement){
+      appEl.requestFullscreen().catch(()=>{});
+    } else {
+      document.exitFullscreen();
+    }
+  }
+  document.getElementById('btnFullscreen').addEventListener('click', toggleFullscreen);
+  document.addEventListener('fullscreenchange', ()=>{
+    isFullscreen = !!document.fullscreenElement;
+    appEl.classList.toggle('fullscreen', isFullscreen);
+    document.getElementById('btnFullscreen').classList.toggle('active', isFullscreen);
+  });
+
+  updateStatus();
+})();
+</script>
+</body>
+</html>
