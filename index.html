@@ -327,7 +327,7 @@ https://contoh.com/foto2.png"></textarea>
           style="flex:1; background:var(--bg); border:1px solid var(--line); border-radius:8px; color:var(--paper); padding:10px 14px; font-family:var(--font-mono); font-size:12px;">
         <button class="btn btn-primary" id="btnLoadGas">Ambil dari Sheet</button>
       </div>
-      <div class="panel-hint" id="gasStatus" style="min-height:16px;"></div>
+      <div class="panel-hint" id="gasStatus" style="min-height:16px;">Tempel URL sekali dan klik "Ambil dari Sheet" — kali berikutnya halaman ini dibuka, link tersebut akan dimuat otomatis.</div>
       <div class="settings-grid">
         <div class="setting">
           <label>Durasi gambar (detik)</label>
@@ -479,9 +479,10 @@ https://contoh.com/foto2.png"></textarea>
 
   // ---------- Load from Google Apps Script feed ----------
   const gasStatus = document.getElementById('gasStatus');
-  document.getElementById('btnLoadGas').addEventListener('click', async ()=>{
-    const url = document.getElementById('gasUrl').value.trim();
-    if(!url){ gasStatus.textContent = 'Tempel dulu URL web app-nya (harus berakhir /exec).'; return; }
+  const gasUrlInput = document.getElementById('gasUrl');
+
+  async function loadFromGas(url, silent){
+    if(!url){ if(!silent) gasStatus.textContent = 'Tempel dulu URL web app-nya (harus berakhir /exec).'; return; }
     gasStatus.textContent = 'Mengambil data dari sheet…';
     try{
       const res = await fetch(url);
@@ -492,6 +493,7 @@ https://contoh.com/foto2.png"></textarea>
         return;
       }
       const wasEmpty = items.length === 0;
+      items = [];
       rows.forEach(r=>{
         const link = (r.link || r.url || '').trim();
         if(link) items.push({id: uid++, url: link, type: guessType(link)});
@@ -499,12 +501,31 @@ https://contoh.com/foto2.png"></textarea>
       rebuildOrder(true);
       renderFilmstrip();
       updateStatus();
-      gasStatus.textContent = rows.length + ' link berhasil dimuat dari sheet.';
-      if(wasEmpty && items.length){ renderStage(); play(); }
+      gasStatus.textContent = rows.length + ' link berhasil dimuat dari sheet · dimuat otomatis saat halaman dibuka.';
+      if(items.length){ renderStage(); play(); }
+      try{ await window.storage.set('gasUrl', url); }catch(e){}
     }catch(err){
       gasStatus.textContent = 'Gagal mengambil data: ' + err.message + '. Pastikan deployment diset "Anyone" bisa akses.';
     }
+  }
+
+  document.getElementById('btnLoadGas').addEventListener('click', ()=>{
+    loadFromGas(gasUrlInput.value.trim(), false);
   });
+
+  async function autoLoadOnStart(){
+    try{
+      const saved = await window.storage.get('gasUrl');
+      if(saved && saved.value){
+        gasUrlInput.value = saved.value;
+        gasStatus.textContent = 'Memuat otomatis dari sheet tersimpan…';
+        await loadFromGas(saved.value, true);
+      }
+    }catch(e){
+      // belum ada URL tersimpan — abaikan, tunggu input manual
+    }
+  }
+  autoLoadOnStart();
 
   // ---------- Settings ----------
   const imgDurationInput = document.getElementById('imgDuration');
