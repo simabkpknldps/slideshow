@@ -322,6 +322,12 @@ https://contoh.com/foto2.png"></textarea>
         <button class="btn btn-primary" id="btnAdd">Tambahkan ke antrian</button>
         <button class="btn btn-ghost" id="btnClear">Kosongkan semua</button>
       </div>
+      <div class="panel-row" style="border-top:1px solid var(--line); padding-top:14px; margin-top:2px;">
+        <input type="text" id="gasUrl" placeholder="https://script.google.com/macros/s/AKfycby3AeJuTZkgRfHS_Q_RJ9ujLxsEsh2qNjboZuBJWTh8vZNbxkEbpS11fIwQxNN6I6fKhQ/exec"
+          style="flex:1; background:var(--bg); border:1px solid var(--line); border-radius:8px; color:var(--paper); padding:10px 14px; font-family:var(--font-mono); font-size:12px;">
+        <button class="btn btn-primary" id="btnLoadGas">Ambil dari Sheet</button>
+      </div>
+      <div class="panel-hint" id="gasStatus" style="min-height:16px;"></div>
       <div class="settings-grid">
         <div class="setting">
           <label>Durasi gambar (detik)</label>
@@ -469,6 +475,35 @@ https://contoh.com/foto2.png"></textarea>
     renderStage();
     renderFilmstrip();
     updateStatus();
+  });
+
+  // ---------- Load from Google Apps Script feed ----------
+  const gasStatus = document.getElementById('gasStatus');
+  document.getElementById('btnLoadGas').addEventListener('click', async ()=>{
+    const url = document.getElementById('gasUrl').value.trim();
+    if(!url){ gasStatus.textContent = 'Tempel dulu URL web app-nya (harus berakhir /exec).'; return; }
+    gasStatus.textContent = 'Mengambil data dari sheet…';
+    try{
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const rows = await res.json();
+      if(!Array.isArray(rows) || rows.length === 0){
+        gasStatus.textContent = 'Sheet terhubung tapi tidak ada baris link yang ditemukan.';
+        return;
+      }
+      const wasEmpty = items.length === 0;
+      rows.forEach(r=>{
+        const link = (r.link || r.url || '').trim();
+        if(link) items.push({id: uid++, url: link, type: guessType(link)});
+      });
+      rebuildOrder(true);
+      renderFilmstrip();
+      updateStatus();
+      gasStatus.textContent = rows.length + ' link berhasil dimuat dari sheet.';
+      if(wasEmpty && items.length){ renderStage(); play(); }
+    }catch(err){
+      gasStatus.textContent = 'Gagal mengambil data: ' + err.message + '. Pastikan deployment diset "Anyone" bisa akses.';
+    }
   });
 
   // ---------- Settings ----------
